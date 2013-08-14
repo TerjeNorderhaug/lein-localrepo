@@ -46,6 +46,10 @@ Output:
 
     $ lein localrepo install [-r repo-path] [-p pom-file] <filename> <[groupId/]artifactId> <version>
 
+### Deploy artifacts to local Maven repository (alternative to install)
+
+    $ lein localrepo deploy [-r repo-path] [-p pom-file] <filename> <[groupId/]artifactId> <version>
+
 If no POM file is specified, a minimal POM will be automatically generated.
 
 Examples:
