@@ -83,6 +83,15 @@
   Example:
     foo-1.0.jar bar/foo 1.0")
 
+(def doc-deploy
+  "Deploy artifact to local repository
+  Arguments:
+    [options] <filename> <artifact-id> <version>
+  Options:
+    -r | --repo repo-path
+    -p | --pom  POM-file (minimal POM is generated if no POM file specified)
+  Example:
+    foo-1.0.jar bar/foo 1.0")
 
 (def default-pom-format
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -105,24 +114,27 @@
                            group-id artifact-id version artifact-id))
     pom-name))
 
+(defn c*
+  [aether-op repo-path pom-filename filename artifact-id version]
+  (aether-op :local-repo (assert-dir repo-path)
+             :coordinates [(symbol artifact-id) version]
+             :jar-file (jio/file (assert-file filename))
+             :pom-file (assert-file pom-filename)
+             :repository {"url" (str (.toURI (java.io.File. repo-path)))} )
+  (main/exit 0))
 
 (defn c-install*
   [repo-path pom-filename filename artifact-id version]
-  (aether/install :local-repo (assert-dir repo-path)
-                  :coordinates [(symbol artifact-id) version]
-                  :jar-file (jio/file (assert-file filename))
-                  :pom-file (assert-file pom-filename))
-  (main/exit 0))
+  (c* aether/install repo-path pom-filename filename artifact-id version))
 
-
-(defn c-install
-  [& args]
+(defn c
+  [op args abort-msg]
   (let [[options args banner] (cli/cli args
                                        ["-r" "--repo" "Local repo path" :default local-repo-path]
                                        ["-p" "--pom" "Artifact POM file"])
-        help-abort (fn []
-                     (println doc-install)
-                     (main/abort))]
+         help-abort (fn []
+                      (println abort-msg)
+                      (main/abort))]
     (cond
      (not= 3 (count args)) (help-abort)
      :otherwise (let [[filename artifact-id version] args
@@ -133,9 +145,16 @@
                                                          [artifact-id artifact-id]))
                       pom-filename (if (:pom options)
                                      (:pom options)
-                                     (default-pom-file pom-group-id pom-artifact-id version))]
-                  (c-install* (:repo options) pom-filename filename artifact-id version)))))
+                                     (default-pom-file pom-group-id pom-artifact-id version)) ]
+                  (c* op (:repo options) pom-filename filename artifact-id version)))))
 
+(defn c-install
+  [& args]
+  (c aether/install args doc-install))
+
+(defn c-deploy
+  [& args]
+  (c aether/deploy args doc-deploy))
 
 (defn read-artifact-description
   [pom-file]
@@ -339,6 +358,7 @@ Leiningen plugin to work with local Maven repository.
 
 coords   Guess Leiningen (Maven) coords of a file
 install  Install artifact to local repository
+deploy   Deploy artifact to local repository
 list     List artifacts in local repository
 remove   Remove artifact from local repository (Not Yet Implemented)
 help     This help screen
@@ -351,11 +371,12 @@ $ lein localrepo help install
     (case command
       "coords"  (println doc-coords)
       "install" (println doc-install)
+      "deploy"  (println doc-deploy)
       "list"    (println doc-list)
       "remove"  (println doc-remove)
       "help"    (println doc-help)
       (in/illegal-arg "Illegal command:" command
-        ", Allowed: coords, install, list, remove, help"))))
+        ", Allowed: coords, install, deploy, list, remove, help"))))
 
 
 (defn apply-cmd
@@ -373,6 +394,7 @@ $ lein localrepo help install
       (case command
         "coords"  (apply-cmd #(= argc 1)        command c-coords  args)
         "install" (apply-cmd #(#{3 5 7} argc)   command c-install args)
+        "deploy"  (apply-cmd #(#{3 5 7} argc)   command c-deploy  args)
         "list"    (apply-cmd #(#{0 1 2 3} argc) command c-list    args)
         "remove"  (apply-cmd #(>= argc 0)       command c-remove  args)
         "help"    (apply-cmd #(or (= argc 0)
